@@ -4,13 +4,13 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
-#include <string.h>
 #include <errno.h>
-#include <unistd.h>
 
 // Global variables
 char *tokens[50];
 char input[200];
+bool redirectionFlag = false;
+char redirection = NULL;
 
 // Splits input into tokens, stores it in the global variable tokens
 // and returns the index of last token + 1.
@@ -20,10 +20,32 @@ int tokenize() {
     // Get first token
     char *token = strtok(input, " ");
 
-    // Get the rest if any
+    // Reset redirection flag and direction
+    redirectionFlag = false;
+    redirection = NULL;
+
+    // Get the remaining tokens if any
     while (token != NULL) {
-        tokens[i++] = token;
-        token = strtok(NULL, " ");
+
+        // Check if there is a redirection
+        if (strcmp(token, "<") == 0 || strcmp(token, ">") == 0) {
+            redirectionFlag = true;
+            redirection = *token;
+
+            // Get the redirection path
+            token = strtok(NULL, " ");
+
+            // Printing the type and direction, skip them for the final tokenized file
+            printf("Redirection type: %c\n", redirection);
+            printf("Direction: %s\n", token);
+            
+            // TODO: Do something with the redirection
+            break;
+        }
+        else {
+            tokens[i++] = token;
+            token = strtok(NULL, " ");
+        }
     }
     
     // This is normally the index of tokens' first NULL,
@@ -69,9 +91,9 @@ void loop() {
         int i = tokenize();
         int n = 0;
         while (n < i) {
-            printf("%s\n", tokens[n++]);
+            printf("Token %i: %s\n", n, tokens[n++]);
         }
-        execute(i);
+        // execute(i);
     }
 }
 
