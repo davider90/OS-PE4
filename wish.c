@@ -28,7 +28,7 @@ void execute(int length) {
     printf("DEBUG: File to execute: %s\n", tokens[0]);
     if (length > 1) {
         int i = 1;
-        printf("DEBUG: Arguemnts: ");
+        printf("DEBUG: Arguments: ");
         while (i < length-1) {
             printf("%s, ", tokens[i++]);
         }
@@ -82,7 +82,7 @@ void io(char *type, char *path, int length) {
     #ifdef ECHO
 
     // Print whatever's fitting
-    printf("DEBUG: I/O redirection -- ");
+    printf("DEBUG: I/O redirection: ");
     if (strcmp(type, ">") == 0) {
         printf("overwrite output (>)\n");
     } else if (strcmp(type, ">>") == 0) {
@@ -92,18 +92,16 @@ void io(char *type, char *path, int length) {
     } else {
         printf("append input (<<)\n");
     }
-    printf("DEBUG: To/from '%s'\n", path);
+    printf("DEBUG: To/from: '%s'\n", path);
 
     #else
 
     if (strcmp(type, ">") == 0 || strcmp(type, "<") == 0) {
         
-        
-        
         // Open file
         int file_desc = open(path, O_CREAT | O_RDWR);
         
-        // –––––––––––––––––––– Error handling ––––––––––––––––––––
+        // Error handling
         if (file_desc < 0) {
             printf("ERROR: Could not access '%s'.\n", path); 
         }
