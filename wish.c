@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 // Uncomment to have the shell print the interpreted input.
 // #define ECHO
@@ -13,7 +15,7 @@
 // Global variables
 char *tokens[50];
 char input[200];
-bool redirection;
+int redirection;
 
 // Executes the tokenized command. Fork first
 void execute(int length) {
@@ -43,6 +45,8 @@ void io(char *type, char *path, int length) {
     *   dup2(2) is used to redirect standard input (0) standard output (1) or error (2)
     *   Example: dup2("file descriptor", 1); // Writes what would usually be printed to the file.
     */
+
+    printf("Got here!");
 
     if (strcmp(type, ">") == 0) {
         
@@ -103,7 +107,7 @@ void io(char *type, char *path, int length) {
         execute(length);
     }
     else if (strcmp(type, ">>") == 0) {
-        // TODO: Handle appending to file
+        // MaTODO: Handle appending to file
         
     }
 }
@@ -114,7 +118,7 @@ int tokenize() {
     int i = 0;
     
     // Reset redirection flag
-    redirection = false;
+    redirection = 0;
     
     // Get first token
     char *token = strtok(input, " ");
@@ -124,7 +128,7 @@ int tokenize() {
 
         // Check if there is a redirection
         if (strcmp(token, "<") == 0 || strcmp(token, ">") == 0 || strcmp(token, ">>") == 0) {
-            redirection = true;
+            redirection = 1;
         }
         
         tokens[i++] = token;
@@ -154,9 +158,6 @@ void loop() {
         // First get input
         scanInput();
         
-
-
-        
         // Tokenize
         int i = tokenize();
         
@@ -165,14 +166,19 @@ void loop() {
 			perror("fork");
 			exit(errno);
 		}
+        printf("pid: %d\n", (int)childID);
         if (childID == 0) {
-            if (redirection) {
+            printf("sanity check\n");
+            printf("redir: %d\n", redirection);
+            if (redirection == 1) {
+                printf("Heisan: %c, %c\n", tokens[i-2], tokens[i-1]);
                 io(tokens[i-2], tokens[i-1], i);
             }
-            else {
-                execute(i);
-            }
-            exit(0);
+            // else {
+            //     printf("got her instead????");
+            //     execute(i);
+            // }
+            // exit(0);
         }
         // Print tokens
         int n = 0;
@@ -185,14 +191,11 @@ void loop() {
         // Execute if we're a child process
         
         // Wait for child process to finish, then continue
-        pid_t zombie;
-		do {
-			zombie = waitpid(-1, NULL, WNOHANG);
-			if (errno != 0) {
-				perror("waitpid");
-				exit(errno);
-			}
-		} while (zombie > 0);
+        wait(NULL);
+		if (errno != 0) {
+			perror("wait");
+			exit(errno);
+		}
     }
 }
 
