@@ -11,7 +11,7 @@
 char *tokens[50];
 char input[200];
 
-void io(char arguments[]) {
+void io(char type, char path[]) {
 
     /*  The return value of open() is a file descriptor, a small,
     *   nonnegative integer that is used in subsequent system calls
@@ -22,63 +22,69 @@ void io(char arguments[]) {
     *   return value of open() is a file descriptor
     *    
     *   dup(2) copies the file descriptor.
+    * 
+    *   dup2(2) is used to redirect standard input (0) standard output (1) or error (2)
+    *   Example: dup2("file descriptor", 1); // Writes what would usually be printed to the file.
     */
 
-    //Maybe TODO: Split arguments into before "<" and after.
-
-    for (int i = 0; i < sizeof(arguments); i++) {
-
-        if (strcmp(arguments[i], "<") == 0) {
-            int file_desc = open(arguments[i+1], O_CREAT | O_RDWR);
-            // –––––––––––––––––––– Error handling ––––––––––––––––––––
-            if (file_desc < 0) {
-                printf("Error opening the file\n"); 
-            }
-            if (errno != 0) {
-                perror("open");
-                printf("Error code %i.", errno);
-                errno = 0;
-            }
-
-            /* int copy = dup(file_desc);
-            if (errno != 0) {
-                perror("dup");
-                printf("Error code %i.", errno);
-                errno = 0;
-            } */
-
-
-            read(file_desc, arguments[i-1], sizeof(arguments[i-1]));
-            // –––––––––––––––––––– Error handling ––––––––––––––––––––
-            if (errno != 0) {
-                perror("read");
-                printf("Error code %i.", errno);
-                errno = 0;
-            }
+    if (strcmp(type, "<") == 0) {
+        
+        int file_desc = open(path, O_CREAT | O_RDWR);
+        
+        // –––––––––––––––––––– Error handling ––––––––––––––––––––
+        if (file_desc < 0) {
+            printf("Error opening the file\n"); 
         }
-        else if (strcmp(arguments[i], ">") == 0) {
-            int file_desc = open(arguments[i+1], O_CREAT | O_RDWR);
-            // –––––––––––––––––––– Error handling ––––––––––––––––––––
-            if (file_desc < 0) {
-                printf("Error opening the file\n"); 
-            }
-            if (errno != 0) {
-                perror("open");
-                printf("Error code %i.", errno);
-                errno = 0;
-            }
-
-            write(file_desc, arguments[i-1], sizeof(arguments[i-1]));
-            // –––––––––––––––––––– Error handling ––––––––––––––––––––
-            if (errno != 0) {
-                perror("write");
-                printf("Error code %i.", errno);
-                errno = 0;
-            }
+        if (errno != 0) {
+            perror("open");
+            printf("Error code %i.", errno);
+            errno = 0;
         }
-        else if (strcmp(arguments[i], ">>") == 0) {
 
+        // Redirection of output to 
+        dup2(file_desc, 1);
+        close(file_desc);
+
+        if (errno != 0) {
+            perror("dup");
+            printf("Error code %i.", errno);
+            errno = 0;
         }
+
+        read(file_desc, arguments[i-1], sizeof(arguments[i-1]));
+        
+        // –––––––––––––––––––– Error handling ––––––––––––––––––––
+        if (errno != 0) {
+            perror("read");
+            printf("Error code %i.", errno);
+            errno = 0;
+        }
+    }
+    else if (strcmp(type, ">") == 0) {
+        
+        int file_desc = open(arguments[i+1], O_CREAT | O_RDWR);
+        
+        // –––––––––––––––––––– Error handling ––––––––––––––––––––
+        if (file_desc < 0) {
+            printf("Error opening the file\n"); 
+        }
+        if (errno != 0) {
+            perror("open");
+            printf("Error code %i.", errno);
+            errno = 0;
+        }
+
+        write(file_desc, arguments[i-1], sizeof(arguments[i-1]));
+        
+        // –––––––––––––––––––– Error handling ––––––––––––––––––––
+        if (errno != 0) {
+            perror("write");
+            printf("Error code %i.", errno);
+            errno = 0;
+        }
+    }
+    else if (strcmp(type, ">>") == 0) {
+
     }
 }
 
@@ -93,7 +99,7 @@ int tokenize() {
     // Get the remaining tokens if any
     while (token != NULL) {
 
-        /* Check if there is a redirection
+        // Check if there is a redirection
         if (strcmp(token, "<") == 0 || strcmp(token, ">") == 0) {
             redirection = *token;
 
@@ -104,15 +110,14 @@ int tokenize() {
             printf("Redirection type: %c\n", redirection);
             printf("Direction: %s\n", token);
             
-            // TODO: Do something with the redirection
+            io(redirection, token);
 
-            //io(tokens[i-1], redirection);
             break; 
-        } */
-        //else {
+        }
+        else {
         tokens[i++] = token;
         token = strtok(NULL, " ");
-        //}
+        }
     }
     
     // This is normally the index of tokens' first NULL,
@@ -135,33 +140,20 @@ void scanInput() {
 // Executes the tokenized command. Fork first
 void execute(int length) {
 
-    // Reset redirection flag and direction
-    bool redirectionFlag = false;
-
     // Make array of arguments for execvp
     char *arguments[length + 1];
     for (int i = 0; i < length; i++) {
         arguments[i] = tokens[i];
-
-        if (strcmp(tokens[i], "<") == 0 || (strcmp(tokens[i], ">") == 0 {
-            redirectionFlag = true;
-        }
     }
     arguments[length] = NULL;
-    
-    // Execute either I/O or execute
-    if (redirectionFlag) {
-        io(arguments);
-    }
-    else {
-        execvp(
-            arguments[0], 
-            arguments
-        );
-        if (errno != 0) {
-			perror("execvp");
-			printf("Error code %i.", errno);
-		}
+
+    execvp(
+        arguments[0], 
+        arguments
+    );
+    if (errno != 0) {
+        perror("execvp");
+        printf("Error code %i.", errno);
     }
 }
 
