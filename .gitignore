@@ -1,2 +1,8 @@
-.vscode/c_cpp_properties.json
-.vscode/settings.json
+# Ignore all
+*
+
+# Unignore files we actually want to keep
+!.gitignore
+!PE4_description.pdf
+!README.md
+!wish.c
