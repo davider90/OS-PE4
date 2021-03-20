@@ -17,6 +17,8 @@ char **tokens;
 char *input;
 size_t i_size;
 bool redirection;
+//// SUGGESTION:
+bool double_redirection;
 
 // Executes the tokenized command
 void execute(int length) {
@@ -61,13 +63,6 @@ void execute(int length) {
 // Handles I/O redirection
 void io(char *type, char *path, int length) {
 
-    /*  The return value of open() is a file descriptor, a small,
-    *   nonnegative integer.
-    * 
-    *   dup2(2) is used to redirect standard input (0) standard output (1) or error (2)
-    *   Example: dup2("file descriptor", 1); // Writes what would usually be printed to the file.
-    */
-
     // Check if in ECHO mode
     #ifdef ECHO
 
@@ -84,6 +79,7 @@ void io(char *type, char *path, int length) {
     
     // Open file (creates one if it doesn't exist)
     int file_desc = open(path, O_CREAT | O_RDWR, S_IRWXU);
+
     
     // Error handling
     if (file_desc < 0) {
@@ -110,7 +106,10 @@ void io(char *type, char *path, int length) {
     #endif
 
     // Execute
-    execute(length);
+    //// SUGGESTION: If in "double-redirection" mode we should not execute yet.
+    if (!double_redirection) {
+        execute(length);
+    }
 }
 
 // Splits input into tokens, stores it in the global variable tokens
@@ -120,6 +119,8 @@ int tokenize() {
     
     // Reset redirection flag
     redirection = false;
+    //// SUGGESTION:
+    double_redirection = false;
     
     // Get first token
     char *token = strtok(input, " ");
@@ -163,6 +164,13 @@ int tokenize() {
 
         // Check if there is a redirection
         if (strcmp(token, "<") == 0 || strcmp(token, ">") == 0) {
+                        
+            /// SUGGESTION: check if its the first or second "<"/">" token - if redirection == true && "<"/">"
+            //// If it is: Set a new DOUBLE redirection flag. Se io() and loop().
+            if (redirection) {
+                double_redirection = true;
+            }
+            
             redirection = true;
         }
 
@@ -226,7 +234,13 @@ void loop() {
 
             // Execute if we're a child process
             if (childID == 0) {
-                if (redirection) {
+                
+                //// SUGGESTION: 
+                if (double_redirection) {
+                    io(tokens[i-2], tokens[i-1], 0);
+                    double_redirection = false; //"Double redirection" mode is done. Go back to normal.
+                    io(tokens[i-4], tokens[i-3], i-4);
+                } else if (redirection) {
                     io(tokens[i-2], tokens[i-1], i-2);
                 } else {
                     execute(i);
