@@ -13,10 +13,10 @@
 // #define ECHO
 
 // Global variables
-char *tokens[50];
-char input[200];
+char **tokens;
+char *input;
+size_t i_size;
 bool redirection;
-char *dir;
 
 // Executes the tokenized command
 void execute(int length) {
@@ -45,16 +45,6 @@ void execute(int length) {
         arguments[i] = tokens[i];
     }
     arguments[length] = NULL;
-
-    // Set directory if specified
-    // if (dir != NULL) {
-    //     char *temp;
-    //     strcat(temp, dir);
-    //     strcat(temp, "/");
-    //     strcat(temp, arguments[0]);
-    //     arguments[0] = temp;
-    // }
-    // TODO: Mulig ikke dette de mener?
 
     // Execute
     execvp(arguments[0], arguments);
@@ -85,54 +75,40 @@ void io(char *type, char *path, int length) {
     printf("DEBUG: I/O redirection: ");
     if (strcmp(type, ">") == 0) {
         printf("overwrite output (>)\n");
-    } else if (strcmp(type, ">>") == 0) {
-        printf("append output (>>)\n");
-    } else if (strcmp(type, "<") == 0) {
-        printf("overwrite input (<)\n");
     } else {
-        printf("append input (<<)\n");
+        printf("overwrite input (<)\n");
     }
     printf("DEBUG: To/from: '%s'\n", path);
 
     #else
-
-    if (strcmp(type, ">") == 0 || strcmp(type, "<") == 0) {
-        
-        // Open file
-        int file_desc = open(path, O_CREAT | O_RDWR);
-        
-        // Error handling
-        if (file_desc < 0) {
-            printf("ERROR: Could not access '%s'.\n", path); 
-        }
-        if (errno != 0) {
-            perror("open");
-            printf("Error code %i\n", errno);
-            errno = 0;
-        }
-
-        // Redirection of I/O to file
-        if (strcmp(type, ">") == 0) {
-            dup2(file_desc, 1);
-        } else {
-            dup2(file_desc, 0);
-        }
-        close(file_desc);
-
-        // Error handling
-        if (errno != 0) {
-            printf("ERROR: Could not redirect I/O.\n");
-            perror("dup");
-            printf("Error code %i\n", errno);
-            errno = 0;
-        }
-
-        // Execute
-        execute(length);
-
-    } else if (strcmp(type, ">>") == 0) {
-        // MaTODO: Handle appending to file  
+    
+    // Open file (creates one if it doesn't exist)
+    int file_desc = open(path, O_CREAT | O_RDWR, S_IRWXU);
+    
+    // Error handling
+    if (file_desc < 0) {
+        printf("ERROR: Could not access '%s'.\n", path); 
     }
+    if (errno != 0) {
+        perror("open");
+        printf("Error code %i\n", errno);
+        errno = 0;
+    }
+
+    // Redirection of I/O to file
+    dup2(file_desc, strcmp(type, ">") == 0 ? 1 : 0);
+    close(file_desc);
+
+    // Error handling
+    if (errno != 0) {
+        printf("ERROR: Could not redirect I/O.\n");
+        perror("dup");
+        printf("Error code %i\n", errno);
+        errno = 0;
+    }
+
+    // Execute
+    execute(length);
 
     #endif
 }
@@ -149,45 +125,82 @@ int tokenize() {
     char *token = strtok(input, " ");
 
     // This is the most practical place to check for internal commands.
-    if (strcmp("exit", token) == 0) {
-        printf("INFO: Thank you for using WISh!\n");
-        printf("NOTICE: Exiting...\n");
-        exit(0);
-    } else if (strcmp("cd", token) == 0) {
-        dir = strtok(NULL, " ");
-        printf("INFO: Changed directory to '%s'\n", dir);
-        return 0;
+    if (token != NULL) {
+
+        // Exit if we're supposed to
+        if (strcmp("exit", token) == 0) {
+            printf("INFO: Thank you for using WISh!\n");
+            printf("NOTICE: Exiting...\n");
+            exit(0);
+        }
+        // Change directory if we're supposed to
+        else if (strcmp("cd", token) == 0) {
+            char *dir = strtok(NULL, " ");
+            if (chdir(dir) > 0) {
+                printf("ERROR: Could not change directory.\n");
+                perror("chdir");
+                printf("Error code %i\n", errno);
+                errno = 0;
+            } else {
+                // Get current path for info to the user
+                char *path = NULL;
+                if (getcwd(path, 0) == NULL) {
+                    printf("ERROR: Could not get current directory for some reason.\n");
+                    perror("getcwd");
+                    printf("Error code %i\n", errno);
+                    errno = 0;
+                }
+                printf("INFO: Changed directory to '%s'\n", path);
+                free(path);
+            }
+            return 0;
+        }
     }
 
     // Get the remaining tokens if any
     while (token != NULL) {
 
         // Check if there is a redirection
-        if (strcmp(token, "<") == 0 ||
-            strcmp(token, ">") == 0 ||
-            strcmp(token, ">>") == 0) {
+        if (strcmp(token, "<") == 0 || strcmp(token, ">") == 0) {
             redirection = true;
         }
-        
+
         tokens[i++] = token;
         token = strtok(NULL, " ");
     }
     
     // This is normally the index of tokens' first NULL,
     // but if tokens was entirely filled, i will be
-    // equal to the size of tokens (50, that is). Can also be 0.
+    // equal to the size of tokens. Can also be 0.
     return i;
 }
 
 // Prompt the user for input and store it in the global variable input.
 void scanInput() {
+    // Reset tokens, input and i_size
+    free(tokens);
+    free(input);
+    i_size = 0;
+
     // Get input
     printf("$ ");
-    fgets(input, sizeof(input), stdin);
+    i_size = getline(&input, &i_size, stdin);
+    // Error handling
+    if (i_size < 0) {
+        printf("ALERT: Reading input failed. Exiting...\n");
+        perror("getline");
+        exit(errno);
+    }
+    *tokens = (char *)malloc(i_size*i_size*sizeof(char));
+    // Error handling
+    if (tokens == NULL) {
+        printf("ALERT: Memory allocation for tokens failed. Exiting...\n");
+        perror("malloc");
+        exit(errno);
+    }
     
     // Remove newline character at end of last argument
-    int length = strlen(input);
-    input[length-1] = '\0';
+    input[i_size-1] = '\0';
 }
 
 // The shell loop
@@ -233,7 +246,11 @@ void loop() {
 
 // The WISh main
 int main(int argc, char **argv) {
+
+    // Define variables
     errno = 0;
+    input = malloc(0);
+    tokens = malloc(0);
     
     printf("INFO: Welcome to WISh (Woefully Inadequate Shell) -- make a wish. ;)\n");
     printf("WARNING: Input may not exceed 200 characters.\n");
