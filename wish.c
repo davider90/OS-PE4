@@ -107,10 +107,10 @@ void io(char *type, char *path, int length) {
         errno = 0;
     }
 
+    #endif
+
     // Execute
     execute(length);
-
-    #endif
 }
 
 // Splits input into tokens, stores it in the global variable tokens
@@ -143,8 +143,9 @@ int tokenize() {
                 errno = 0;
             } else {
                 // Get current path for info to the user
-                char *path = NULL;
-                if (getcwd(path, 0) == NULL) {
+                char *buffer = NULL;
+                char *path = getcwd(buffer, 0);
+                if (path == NULL) {
                     printf("ERROR: Could not get current directory for some reason.\n");
                     perror("getcwd");
                     printf("Error code %i\n", errno);
