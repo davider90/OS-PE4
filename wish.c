@@ -13,11 +13,26 @@
 // #define ECHO
 
 // Global variables
-char **tokens;
 char *input;
+char **tokens;
 size_t i_size;
 bool redirection;
 bool double_redirection;
+
+// Simply for printing path
+void print_path() {
+    char *path = getcwd(NULL, 0);  // Path is malloc'd in here
+    // Error handling
+    if (path == NULL) {
+        printf("ERROR: Could not get current directory for some reason.\n");
+        perror("getcwd");
+        printf("Error code %d\n", errno);
+        errno = 0;
+        return;
+    }
+    printf("INFO: Current directory is '%s'\n", path);
+    free(path);  // Needs to be freed
+}
 
 // Executes the tokenized command
 void execute(int length) {
@@ -49,6 +64,7 @@ void execute(int length) {
     
     // Execute
     execvp(arguments[0], arguments);
+    // Error handling
     if (errno != 0) {
         printf("ERROR: Could not execute %s.\n", arguments[0]);
         perror("execvp");
@@ -78,13 +94,9 @@ void io(char *type, char *path, int length) {
     
     // Open file (creates one if it doesn't exist)
     int file_desc = open(path, O_CREAT | O_RDWR, S_IRWXU);
-
-    
     // Error handling
     if (file_desc < 0) {
-        printf("ERROR: Could not access '%s'.\n", path); 
-    }
-    if (errno != 0) {
+        printf("ERROR: Could not access '%s'.\n", path);
         perror("open");
         printf("Error code %d\n", errno);
         errno = 0;
@@ -93,7 +105,6 @@ void io(char *type, char *path, int length) {
     // Redirection of I/O to file
     dup2(file_desc, strcmp(type, ">") == 0 ? 1 : 0);
     close(file_desc);
-
     // Error handling
     if (errno != 0) {
         printf("ERROR: Could not redirect I/O.\n");
@@ -105,18 +116,18 @@ void io(char *type, char *path, int length) {
     #endif
 
     // Execute
-    // If in "double-redirection" mode we should not execute yet.
+    // If in "double-redirection" mode, we should not execute yet.
     if (!double_redirection) {
         execute(length);
     }
 }
 
 // Splits input into tokens, stores it in the global variable tokens
-// and returns the index of last token + 1.
+// and returns the index of last token + 1. Will also run internal commands.
 int tokenize() {
     int i = 0;
     
-    // Reset redirection flag
+    // Reset redirection flags
     redirection = false;
     double_redirection = false;
     
@@ -135,6 +146,7 @@ int tokenize() {
         // Change directory if we're supposed to
         else if (strcmp("cd", token) == 0) {
             char *dir = strtok(NULL, " ");
+            // Error handling
             if (chdir(dir) < 0) {
                 printf("ERROR: Could not change directory.\n");
                 perror("chdir");
@@ -142,19 +154,9 @@ int tokenize() {
                 errno = 0;
             } else {
                 // Get current path for info to the user
-                // char *path = getcwd(NULL, 0);
-                // if (path == NULL) {
-                //     printf("ERROR: Could not get current directory for some reason.\n");
-                //     perror("getcwd");
-                //     printf("Error code %d\n", errno);
-                //     errno = 0;
-                //     return 0;
-                // }
-                // TODO: Decide on what to do here
-                printf("INFO: Changed directory to '%s'\n", dir);
-                // free(path);
+                print_path();
             }
-            return 0;
+            return 0;  // We can return in case of internal commands.
         }
     }
 
@@ -163,16 +165,18 @@ int tokenize() {
 
         // Check if there is a redirection
         if (strcmp(token, "<") == 0 || strcmp(token, ">") == 0) {
-                        
-            // Check if its the first or second "<"/">" token. If it is: Set a new double redirection flag.
+            // Check if it's the first or second redirection token.
+            // If it's the second, set a new double redirection flag.
             if (redirection) {
                 double_redirection = true;
             }
-            
             redirection = true;
         }
 
+        // Copy the token
         tokens[i++] = token;
+        
+        // Get next token if any
         token = strtok(NULL, " ");
     }
     
@@ -182,23 +186,26 @@ int tokenize() {
     return i;
 }
 
-// Prompt the user for input and store it in the global variable input.
-void scanInput() {
-    // Reset tokens, input and i_size
-    free(tokens);
-    free(input);
-    i_size = 0;
+// Gets input and stores it in the global variable input
+void scanInput(FILE *stream) {
 
     // Get input
-    printf("$ ");
-    i_size = getline(&input, &i_size, stdin);
+    printf(stream == NULL ? "$ " : "");
+    // Input is malloc'd in getline
+    i_size = getline(&input, &i_size, stream == NULL ? stdin : stream);
     // Error handling
-    if (i_size < 0) {
+    if ((long)i_size < 0) {
+        // If we're just done with the file, we can return safely.
+        if (stream != NULL && feof(stream)) {
+            return;
+        }
         printf("ALERT: Reading input failed. Exiting...\n");
         perror("getline");
         exit(errno);
     }
-    *tokens = (char *)malloc(i_size*i_size*sizeof(char));
+
+    // Allocate memory for tokens
+    tokens = malloc((i_size-1) * sizeof(char *));
     // Error handling
     if (tokens == NULL) {
         printf("ALERT: Memory allocation for tokens failed. Exiting...\n");
@@ -211,11 +218,14 @@ void scanInput() {
 }
 
 // The shell loop
-void loop(bool read_from_arg) {
+void loop(bool read_from_file, FILE *stream) {
     while (1) {
-        // First get input (if not reading from arg)
-        if (!read_from_arg) {
-            scanInput();
+        // First get input
+        scanInput(stream);
+
+        // Bail out if we're done reading from file
+        if (read_from_file && feof(stream)) {
+            return;
         }
         
         // Tokenize
@@ -226,6 +236,7 @@ void loop(bool read_from_arg) {
 
             // Fork
             pid_t childID = fork();
+            // Error handling
             if (errno != 0) {
                 printf("ALERT: Error occured while forking. Exiting...\n");
                 perror("fork");
@@ -237,7 +248,7 @@ void loop(bool read_from_arg) {
 
                 if (double_redirection) {
                     io(tokens[i-2], tokens[i-1], 0);
-                    double_redirection = false; //"Double redirection" mode is done. Go back to normal.
+                    double_redirection = false;  // Double redirection handled. Set flag to normal.
                     io(tokens[i-4], tokens[i-3], i-4);
                 } else if (redirection) {
                     io(tokens[i-2], tokens[i-1], i-2);
@@ -249,6 +260,7 @@ void loop(bool read_from_arg) {
 
             // Wait for child process to finish, then continue
             wait(NULL);
+            // Error handling
             if (errno != 0) {
                 printf("ALERT: Error occured while waiting for child process. Exiting...\n");
                 perror("wait");
@@ -256,60 +268,46 @@ void loop(bool read_from_arg) {
             }
         }
 
-        // Shouldn't loop here when reading from file
-        if (read_from_arg) {
-            break;
-        }
+        // Reset variables and free memory
+        free(input);
+        free(tokens);
+        i_size = 0;
     }
 }
 
 // The WISh main
 int main(int argc, char **argv) {
 
-    // Define variables
+    // Initialise variables
     errno = 0;
-    input = malloc(0);
-    tokens = malloc(0);
+    input = NULL;
+    tokens = NULL;
     i_size = 0;
     
+    // Introduction
     printf("INFO: Welcome to WISh (Woefully Inadequate Shell) -- make a wish. ;)\n");
+    print_path();
 
-    // If we should read from file
+    // We should read from file if it's provided
     if (argc > 1) {
     
+        printf("NOTICE: File provided. Reading input from file...\n");
         // Open file
         FILE *file = fopen(argv[1], "r");
-        if(file == NULL) {
-            perror("Unable to open file!");
-            exit(1);
+        // Error handling
+        if (file == NULL) {
+            printf("ALERT: File could not be opened. Exiting...\n");
+            perror("file");
+            exit(errno);
         }
 
         // Read till end of file
-        do {
-            i_size = getline(&input, &i_size, file);
-            if (i_size < 0) {
-                printf("ALERT: Reading file '%s' failed. Exiting...\n", argv[1]);
-                perror("getline");
-                exit(errno);
-            }
-            
-            // Remove newline character at end of last argument
-            input[i_size-1] = '\0';
-
-            *tokens = (char *)malloc(i_size*i_size*sizeof(char));
-            // Error handling
-            if (tokens == NULL) {
-                printf("ALERT: Memory allocation for tokens failed. Exiting...\n");
-                perror("malloc");
-                exit(errno);
-            }
-
-            loop(true);
-
-        } while (!feof(file));
+        loop(true, file);
     }
 
-    loop(false);
+    // Normal shell loop
+    loop(false, NULL);
     
-    return 0;
+    // We should never get here, so if we do, return error.
+    return 1;
 }
