@@ -205,7 +205,8 @@ void scanInput(FILE *stream) {
     }
 
     // Allocate memory for tokens
-    tokens = malloc((i_size-1) * sizeof(char *));
+    size_t worst_amount = i_size / 2;
+    tokens = malloc(worst_amount*sizeof(char *));
     // Error handling
     if (tokens == NULL) {
         printf("ALERT: Memory allocation for tokens failed. Exiting...\n");
