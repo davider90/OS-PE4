@@ -53,7 +53,7 @@ void execute(int length) {
     if (errno != 0) {
         printf("ERROR: Could not execute %s.\n", arguments[0]);
         perror("execvp");
-        printf("Error code %i\n", errno);
+        printf("Error code %d\n", errno);
         errno = 0;
     }
 
@@ -87,7 +87,7 @@ void io(char *type, char *path, int length) {
     }
     if (errno != 0) {
         perror("open");
-        printf("Error code %i\n", errno);
+        printf("Error code %d\n", errno);
         errno = 0;
     }
 
@@ -98,8 +98,8 @@ void io(char *type, char *path, int length) {
     // Error handling
     if (errno != 0) {
         printf("ERROR: Could not redirect I/O.\n");
-        perror("dup");
-        printf("Error code %i\n", errno);
+        perror("dup2");
+        printf("Error code %d\n", errno);
         errno = 0;
     }
 
@@ -140,7 +140,7 @@ int tokenize() {
             if (chdir(dir) > 0) {
                 printf("ERROR: Could not change directory.\n");
                 perror("chdir");
-                printf("Error code %i\n", errno);
+                printf("Error code %d\n", errno);
                 errno = 0;
             } else {
                 // Get current path for info to the user
@@ -149,7 +149,7 @@ int tokenize() {
                 if (path == NULL) {
                     printf("ERROR: Could not get current directory for some reason.\n");
                     perror("getcwd");
-                    printf("Error code %i\n", errno);
+                    printf("Error code %d\n", errno);
                     errno = 0;
                 }
                 printf("INFO: Changed directory to '%s'\n", path);
