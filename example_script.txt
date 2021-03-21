@@ -1,0 +1,4 @@
+ls
+ls > output_1.txt
+ls -l > output_2.txt
+cat < output.txt > output_3.txt
