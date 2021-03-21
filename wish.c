@@ -9,23 +9,15 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
-// Uncomment to have the shell print the interpreted input.
+// Task a): Uncomment to have the shell print the interpreted input.
 // #define ECHO
 
 // Global variables
-char **tokens; // Why in heck double **. TODO: find out
+char **tokens;
 char *input;
 size_t i_size;
 bool redirection;
-//// SUGGESTION:
 bool double_redirection;
-
-/*  Need a way of saving commands until they all should be executed.
-*   Solution: Global list of pointers to different token lists
-*   
-*   char *scripts;
-*/
-
 
 // Executes the tokenized command
 void execute(int length) {
@@ -54,7 +46,7 @@ void execute(int length) {
         arguments[i] = tokens[i];
     }
     arguments[length] = NULL;
-
+    
     // Execute
     execvp(arguments[0], arguments);
     if (errno != 0) {
@@ -113,7 +105,7 @@ void io(char *type, char *path, int length) {
     #endif
 
     // Execute
-    //// SUGGESTION: If in "double-redirection" mode we should not execute yet.
+    // If in "double-redirection" mode we should not execute yet.
     if (!double_redirection) {
         execute(length);
     }
@@ -126,7 +118,6 @@ int tokenize() {
     
     // Reset redirection flag
     redirection = false;
-    //// SUGGESTION:
     double_redirection = false;
     
     // Get first token
@@ -144,23 +135,24 @@ int tokenize() {
         // Change directory if we're supposed to
         else if (strcmp("cd", token) == 0) {
             char *dir = strtok(NULL, " ");
-            if (chdir(dir) > 0) {
+            if (chdir(dir) < 0) {
                 printf("ERROR: Could not change directory.\n");
                 perror("chdir");
                 printf("Error code %d\n", errno);
                 errno = 0;
             } else {
                 // Get current path for info to the user
-                char *buffer = NULL;
-                char *path = getcwd(buffer, 0);
-                if (path == NULL) {
-                    printf("ERROR: Could not get current directory for some reason.\n");
-                    perror("getcwd");
-                    printf("Error code %d\n", errno);
-                    errno = 0;
-                }
-                printf("INFO: Changed directory to '%s'\n", path);
-                free(path);
+                // char *path = getcwd(NULL, 0);
+                // if (path == NULL) {
+                //     printf("ERROR: Could not get current directory for some reason.\n");
+                //     perror("getcwd");
+                //     printf("Error code %d\n", errno);
+                //     errno = 0;
+                //     return 0;
+                // }
+                // TODO: Decide on what to do here
+                printf("INFO: Changed directory to '%s'\n", dir);
+                // free(path);
             }
             return 0;
         }
@@ -172,8 +164,7 @@ int tokenize() {
         // Check if there is a redirection
         if (strcmp(token, "<") == 0 || strcmp(token, ">") == 0) {
                         
-            /// SUGGESTION: check if its the first or second "<"/">" token - if redirection == true && "<"/">"
-            //// If it is: Set a new DOUBLE redirection flag. Se io() and loop().
+            // Check if its the first or second "<"/">" token. If it is: Set a new double redirection flag.
             if (redirection) {
                 double_redirection = true;
             }
@@ -220,34 +211,15 @@ void scanInput() {
 }
 
 // The shell loop
-void loop() {
+void loop(bool read_from_arg) {
     while (1) {
-        // First get input
-        scanInput();
+        // First get input (if not reading from arg)
+        if (!read_from_arg) {
+            scanInput();
+        }
         
         // Tokenize
         int i = tokenize();
-        
-        /*  Scripting: Maybe here:
-        *   Check if first char is #?
-        *   If it is current tokensss should be pointed to by our new super command token holder.
-        *   Also rest of function should be stalled / not be executed.
-        * 
-        *   If our super command token holder is ready to be executed because of some command yet unknown,
-        *   for all tokens pointers: run rest of function.
-        *   
-        *   if (tokens[0] == "#") {
-        *       scripts.apppendwaddup(tokens);
-        *       break; exit; somthin;
-        *   } else if (tokens[0] == "command yet unknown") {
-        *       for (tokens in scrips) {
-        *           run the rest of code. how. Maybe put rest of function in another one called "fork" or "run" or "bitchspray"
-        *       }
-        *   } else {
-        *       Do normal stuff. Run "bitchspray".
-        *   }
-        *   
-        */
         
         // If we have something to do...
         if (i > 0) {
@@ -262,8 +234,7 @@ void loop() {
 
             // Execute if we're a child process
             if (childID == 0) {
-                
-                //// SUGGESTION: 
+
                 if (double_redirection) {
                     io(tokens[i-2], tokens[i-1], 0);
                     double_redirection = false; //"Double redirection" mode is done. Go back to normal.
@@ -284,6 +255,11 @@ void loop() {
                 exit(errno);
             }
         }
+
+        // Shouldn't loop here when reading from file
+        if (read_from_arg) {
+            break;
+        }
     }
 }
 
@@ -294,11 +270,46 @@ int main(int argc, char **argv) {
     errno = 0;
     input = malloc(0);
     tokens = malloc(0);
+    i_size = 0;
     
     printf("INFO: Welcome to WISh (Woefully Inadequate Shell) -- make a wish. ;)\n");
-    printf("WARNING: Input may not exceed 200 characters.\n");
-    printf("WARNING: A single argument may not exceed 50 characters.\n");
-    loop();
+
+    // If we should read from file
+    if (argc > 1) {
+    
+        // Open file
+        FILE *file = fopen(argv[1], "r");
+        if(file == NULL) {
+            perror("Unable to open file!");
+            exit(1);
+        }
+
+        // Read till end of file
+        do {
+            i_size = getline(&input, &i_size, file);
+            if (i_size < 0) {
+                printf("ALERT: Reading file '%s' failed. Exiting...\n", argv[1]);
+                perror("getline");
+                exit(errno);
+            }
+            
+            // Remove newline character at end of last argument
+            input[i_size-1] = '\0';
+
+            *tokens = (char *)malloc(i_size*i_size*sizeof(char));
+            // Error handling
+            if (tokens == NULL) {
+                printf("ALERT: Memory allocation for tokens failed. Exiting...\n");
+                perror("malloc");
+                exit(errno);
+            }
+
+            loop(true);
+
+        } while (!feof(file));
+    }
+
+    loop(false);
     
     return 0;
 }
