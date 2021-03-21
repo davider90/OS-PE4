@@ -13,12 +13,19 @@
 // #define ECHO
 
 // Global variables
-char **tokens;
+char **tokens; // Why in heck double **. TODO: find out
 char *input;
 size_t i_size;
 bool redirection;
 //// SUGGESTION:
 bool double_redirection;
+
+/*  Need a way of saving commands until they all should be executed.
+*   Solution: Global list of pointers to different token lists
+*   
+*   char *scripts;
+*/
+
 
 // Executes the tokenized command
 void execute(int length) {
@@ -220,6 +227,27 @@ void loop() {
         
         // Tokenize
         int i = tokenize();
+        
+        /*  Scripting: Maybe here:
+        *   Check if first char is #?
+        *   If it is current tokensss should be pointed to by our new super command token holder.
+        *   Also rest of function should be stalled / not be executed.
+        * 
+        *   If our super command token holder is ready to be executed because of some command yet unknown,
+        *   for all tokens pointers: run rest of function.
+        *   
+        *   if (tokens[0] == "#") {
+        *       scripts.apppendwaddup(tokens);
+        *       break; exit; somthin;
+        *   } else if (tokens[0] == "command yet unknown") {
+        *       for (tokens in scrips) {
+        *           run the rest of code. how. Maybe put rest of function in another one called "fork" or "run" or "bitchspray"
+        *       }
+        *   } else {
+        *       Do normal stuff. Run "bitchspray".
+        *   }
+        *   
+        */
         
         // If we have something to do...
         if (i > 0) {
