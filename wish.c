@@ -312,6 +312,7 @@ int main(int argc, char **argv) {
 
         // Read till end of file
         loop(file);
+        printf("NOTICE: File reading concluded.\n");
     }
 
     // Normal shell loop
