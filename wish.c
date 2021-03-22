@@ -64,13 +64,11 @@ void execute(int length) {
     
     // Execute
     execvp(arguments[0], arguments);
-    // Error handling
-    if (errno != 0) {
-        printf("ERROR: Could not execute %s.\n", arguments[0]);
-        perror("execvp");
-        printf("Error code %d\n", errno);
-        errno = 0;
-    }
+    // Error handling (execvp shouldn't return)
+    printf("ERROR: Could not execute %s.\n", arguments[0]);
+    perror("execvp");
+    printf("Error code %d\n", errno);
+    errno = 0;
 
     #endif
 }
@@ -103,15 +101,17 @@ void io(char *type, char *path, int length) {
     }
 
     // Redirection of I/O to file
-    dup2(file_desc, strcmp(type, ">") == 0 ? 1 : 0);
-    close(file_desc);
+    int duped_file_desc = dup2(file_desc, strcmp(type, ">") == 0 ? 1 : 0);
     // Error handling
-    if (errno != 0) {
+    if (duped_file_desc < 0) {
         printf("ERROR: Could not redirect I/O.\n");
         perror("dup2");
         printf("Error code %d\n", errno);
         errno = 0;
     }
+
+    // Close file
+    close(file_desc);
 
     #endif
 
@@ -219,13 +219,13 @@ void scanInput(FILE *stream) {
 }
 
 // The shell loop
-void loop(bool read_from_file, FILE *stream) {
+void loop(FILE *stream) {
     while (1) {
         // First get input
         scanInput(stream);
 
         // Bail out if we're done reading from file
-        if (read_from_file && feof(stream)) {
+        if (stream != NULL && feof(stream)) {
             return;
         }
         
@@ -238,7 +238,7 @@ void loop(bool read_from_file, FILE *stream) {
             // Fork
             pid_t childID = fork();
             // Error handling
-            if (errno != 0) {
+            if (childID < 0) {
                 printf("ALERT: Error occured while forking. Exiting...\n");
                 perror("fork");
                 exit(errno);
@@ -249,7 +249,8 @@ void loop(bool read_from_file, FILE *stream) {
 
                 if (double_redirection) {
                     io(tokens[i-2], tokens[i-1], 0);
-                    double_redirection = false;  // Double redirection handled. Set flag to normal.
+                    // Double redirection handled. Set flag to normal.
+                    double_redirection = false;
                     io(tokens[i-4], tokens[i-3], i-4);
                 } else if (redirection) {
                     io(tokens[i-2], tokens[i-1], i-2);
@@ -259,13 +260,20 @@ void loop(bool read_from_file, FILE *stream) {
                 exit(0);
             }
 
-            // Wait for child process to finish, then continue
-            wait(NULL);
-            // Error handling
-            if (errno != 0) {
+            // Wait for child process to finish, then continue.
+            // Also, error handling.
+            int child_status = 0;
+            if (wait(&child_status) < 0) {
                 printf("ALERT: Error occured while waiting for child process. Exiting...\n");
                 perror("wait");
                 exit(errno);
+            }
+            if (WIFSIGNALED(child_status)) {
+                printf("WARNING: Child process was interrupted by unexpected signal.\n");
+                printf("Signal number %d\n", WTERMSIG(child_status));
+            } else if (WEXITSTATUS(child_status) != 0) {
+                printf("WARNING: Unhandled error occured in child process.\n");
+                printf("%s\n", strerror(WEXITSTATUS(child_status)));
             }
         }
 
@@ -303,11 +311,11 @@ int main(int argc, char **argv) {
         }
 
         // Read till end of file
-        loop(true, file);
+        loop(file);
     }
 
     // Normal shell loop
-    loop(false, NULL);
+    loop(NULL);
     
     // We should never get here, so if we do, return error.
     return 1;
